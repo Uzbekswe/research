@@ -9,6 +9,7 @@ Modelled after gpt_researcher/agent.py (GPTResearcher).
 import asyncio
 import json
 import logging
+import time
 
 from researcher.actions.query_processing import get_sub_queries
 from researcher.actions.report_generation import (
@@ -98,42 +99,41 @@ class DeepResearcher:
     # ------------------------------------------------------------------
 
     async def conduct_research(self) -> str:
-        """Run the full research loop and return the assembled context string.
+        """Run the full research loop and return the assembled context string."""
+        start_time = time.monotonic()
+        logger.info("🔍 Starting research for: %s", self.query)
 
-        Steps
-        -----
-        1. Determine agent role (already set in ``__init__``; can be overridden).
-        2. If ``report_source == "local"``, stub — document loading is Layer 2.
-        3. Resolve sources: either caller-supplied URLs or web search per sub-query.
-        4. Scrape, summarise, and deduplicate all sources concurrently.
-        5. Assemble context via :func:`~researcher.context.context_manager.get_research_context`.
-        6. Store result in ``self.context`` and return it.
-
-        Returns:
-            The assembled context string ready to be passed to :meth:`write_report`.
-        """
-        logger.info("Starting research for: %r", self.query)
-
-        # ── Step 2: local source mode ─────────────────────────────────────
         if self.report_source == "local":
             logger.warning(
-                "Local document mode is not yet implemented (Layer 2). "
-                "Falling back to web search."
+                "Local document mode is not yet implemented. Falling back to web search."
             )
 
-        # ── Step 3: decide where to get URLs from ────────────────────────
         if self.source_urls:
-            # User supplied explicit URLs — skip the search step entirely.
-            logger.info("Using %d caller-supplied source URLs", len(self.source_urls))
             all_scraped = await browse_web_sources(
                 query=self.query,
                 urls=self.source_urls,
                 cfg=self.cfg,
                 websocket=self.websocket,
             )
-            await self._ingest_scraped(all_scraped)
+            for result in all_scraped:
+                url = result["url"]
+                if url not in self.memory.visited_urls:
+                    self.memory.visited_urls.add(url)
+                    summary = await summarize_url(
+                        url=url,
+                        content=result["raw_content"],
+                        query=self.query,
+                        cfg=self.cfg,
+                        cost_callback=self.add_costs,
+                    )
+                    self.memory.add_source_no_visit_check(url, result["raw_content"], summary)
+                    try:
+                        imgs: list[str] = json.loads(result.get("image_urls", "[]"))
+                        self.memory.add_images(imgs)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
         else:
-            # ── Step 3a: generate sub-queries ─────────────────────────────
+            # ── 1. Generate sub-queries sequentially ─────────────────────
             sub_queries = await get_sub_queries(
                 query=self.query,
                 agent_role_prompt=self.role,
@@ -142,24 +142,79 @@ class DeepResearcher:
                 report_type=self.report_type,
                 cost_callback=self.add_costs,
             )
-            # Always include the original query so we don't miss direct hits.
             if self.query not in sub_queries:
                 sub_queries = [self.query] + sub_queries
-            logger.info("Generated %d sub-queries: %s", len(sub_queries), sub_queries)
+            logger.info("📋 Generated %d sub-queries: %s", len(sub_queries), sub_queries)
 
-            # ── Step 4: search + scrape all sub-queries concurrently ──────
-            scrape_tasks = [
-                search_and_scrape(q, self.cfg, self.websocket) for q in sub_queries
-            ]
-            results_per_query: list[list[dict]] = await asyncio.gather(*scrape_tasks)
+            # ── 2. Process all sub-queries concurrently ───────────────────
+            async def process_single_query(sub_query: str) -> int:
+                try:
+                    # Step 1: scrape all results for this sub-query
+                    scraped = await search_and_scrape(sub_query, self.cfg, self.websocket)
 
-            for sub_query, scraped_list in zip(sub_queries, results_per_query):
-                logger.debug(
-                    "Sub-query %r returned %d scraped sources", sub_query, len(scraped_list)
-                )
-                await self._ingest_scraped(scraped_list)
+                    # Step 2: claim unvisited URLs atomically (no await → no race)
+                    new_sources = []
+                    for result in scraped:
+                        if result.get("raw_content") and result["url"] not in self.memory.visited_urls:
+                            self.memory.visited_urls.add(result["url"])
+                            new_sources.append(result)
 
-        # ── Step 5: build context string ─────────────────────────────────
+                    if not new_sources:
+                        return 0
+
+                    # Step 3: summarize ALL new sources concurrently
+                    summarize_tasks = [
+                        summarize_url(s["url"], s["raw_content"], sub_query, self.cfg, self.add_costs)
+                        for s in new_sources
+                    ]
+                    summaries = await asyncio.gather(*summarize_tasks, return_exceptions=True)
+
+                    # Step 4: store results
+                    count = 0
+                    for source, summary in zip(new_sources, summaries):
+                        if isinstance(summary, Exception) or not summary:
+                            continue
+                        self.memory.add_source_no_visit_check(
+                            source["url"], source["raw_content"], summary
+                        )
+                        try:
+                            imgs: list[str] = json.loads(source.get("image_urls", "[]"))
+                            self.memory.add_images(imgs)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                        count += 1
+                    return count
+
+                except Exception as exc:
+                    logger.error("Sub-query %r failed: %s", sub_query, exc)
+                    return 0
+
+            _gather_start = time.monotonic()
+            tasks = [process_single_query(q) for q in sub_queries]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            _gather_elapsed = time.monotonic() - _gather_start
+
+            # ── 3. Log per-sub-query results + parallelism benefit ────────
+            total = 0
+            for sub_query, result in zip(sub_queries, results):
+                count = result if isinstance(result, int) else 0
+                total += count
+                logger.info("  → '%s': %d sources", sub_query, count)
+
+            _avg_time = 15  # conservative sequential estimate per sub-query (seconds)
+            logger.info(
+                "⚡ Parallel execution: %d sub-queries ran concurrently", len(sub_queries)
+            )
+            logger.info(
+                "   Sequential estimate: ~%ds | Actual: %.1fs",
+                len(sub_queries) * _avg_time, _gather_elapsed,
+            )
+            logger.info(
+                "✅ Research complete. %d sources found across %d sub-queries",
+                total, len(sub_queries),
+            )
+
+        # ── 4. Build context string ───────────────────────────────────────
         sources = self.memory.get_context(max_sources=20)
         self.context = await get_research_context(
             sources=sources,
@@ -167,56 +222,10 @@ class DeepResearcher:
             cfg=self.cfg,
         )
 
-        logger.info(
-            "Research complete — %d sources, context ~%d tokens",
-            len(sources),
-            len(self.context) // 4,
-        )
+        elapsed = time.monotonic() - start_time
+        logger.info("📊 Context length: ~%d tokens", len(self.context) // 4)
+        logger.info("⏱ Research completed in %.1fs", elapsed)
         return self.context
-
-    async def _ingest_scraped(self, scraped_list: list[dict]) -> None:
-        """Summarise new (unvisited) scraped sources and add them to memory.
-
-        Summarisation calls are fired concurrently for all new sources in the
-        batch, then results are written to memory sequentially (asyncio is
-        single-threaded so there are no race conditions, but sequential writes
-        keep the visited-URL dedup logic clean).
-
-        Args:
-            scraped_list: Output of :func:`~researcher.actions.web_scraping.search_and_scrape`.
-        """
-        new_sources = [
-            s for s in scraped_list if not self.memory.is_visited(s["url"])
-        ]
-        if not new_sources:
-            return
-
-        # Summarise all new sources concurrently.
-        summarise_tasks = [
-            summarize_url(
-                url=s["url"],
-                content=s["raw_content"],
-                query=self.query,
-                cfg=self.cfg,
-                cost_callback=self.add_costs,
-            )
-            for s in new_sources
-        ]
-        summaries: list[str] = await asyncio.gather(*summarise_tasks)
-
-        # Write to memory sequentially (no yield points → no races).
-        for source, summary in zip(new_sources, summaries):
-            self.memory.add_source(
-                url=source["url"],
-                content=source["raw_content"],
-                summary=summary,
-            )
-            # Collect image URLs found during scraping.
-            try:
-                imgs: list[str] = json.loads(source.get("image_urls", "[]"))
-                self.memory.add_images(imgs)
-            except (json.JSONDecodeError, TypeError):
-                pass
 
     # ------------------------------------------------------------------
     # Report writing

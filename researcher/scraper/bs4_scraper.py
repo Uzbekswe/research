@@ -10,11 +10,12 @@ from .base import BaseScraper
 
 logger = logging.getLogger(__name__)
 
-_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/124.0.0.0 Safari/537.36"
-)
+_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; ResearchBot/1.0)",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Accept-Encoding": "gzip, deflate",
+}
 
 # Tags whose entire subtree is boilerplate — removed before text extraction.
 _NOISE_TAGS = [
@@ -151,7 +152,7 @@ class BeautifulSoupScraper(BaseScraper):
         try:
             response = await self.session.get(
                 self.url,
-                headers={"User-Agent": _USER_AGENT},
+                headers=_HEADERS,
                 follow_redirects=True,
             )
             response.raise_for_status()
@@ -186,6 +187,16 @@ class BeautifulSoupScraper(BaseScraper):
                 return "", "[]"
 
             text = _extract_text(content_node)
+
+            # Fallback: if the content selectors returned almost nothing,
+            # collect all <p> tags from the full page — handles sites where
+            # article/main tags don't exist or are dynamically rendered.
+            if len(text) < 200:
+                paragraphs = [p.get_text(separator=" ").strip() for p in soup.find_all("p")]
+                fallback = "\n\n".join(p for p in paragraphs if p)
+                if len(fallback) > len(text):
+                    text = fallback
+
             chunk_max = _get_chunk_max()
             text = text[:chunk_max]
 

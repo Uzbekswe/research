@@ -6,6 +6,7 @@ from .google_provider import GoogleProvider
 from .groq_provider import GroqProvider
 from .ollama_provider import OllamaProvider
 from .openai_provider import OpenAIProvider
+from .vessl_provider import VesslProvider
 
 _PROVIDERS = {
     "openai": lambda model, temp, _max: OpenAIProvider(model=model, temperature=temp),
@@ -13,6 +14,7 @@ _PROVIDERS = {
     "google": lambda model, temp, _max: GoogleProvider(model=model, temperature=temp),
     "groq": lambda model, temp, _max: GroqProvider(model=model, temperature=temp),
     "ollama": lambda model, temp, _max: OllamaProvider(model=model, temperature=temp),
+    "vessl": lambda model, temp, _max: VesslProvider(model=model, temperature=temp),
 }
 
 
@@ -44,5 +46,6 @@ __all__ = [
     "GoogleProvider",
     "GroqProvider",
     "OllamaProvider",
+    "VesslProvider",
     "get_llm_provider",
 ]

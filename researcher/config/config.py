@@ -52,9 +52,9 @@ class Config:
             setattr(self, f.name, f.default)
 
     def _load_env(self):
-        _int = lambda k, d: int(os.getenv(k, d))
-        _float = lambda k, d: float(os.getenv(k, d))
-        _str = lambda k, d: os.getenv(k, d)
+        _int = lambda k, d: int(v) if (v := os.getenv(k, "").strip()) else int(d)
+        _float = lambda k, d: float(v) if (v := os.getenv(k, "").strip()) else float(d)
+        _str = lambda k, d: v if (v := os.getenv(k, "").strip()) else d
 
         self.FAST_LLM = _str("FAST_LLM", self.FAST_LLM)
         self.SMART_LLM = _str("SMART_LLM", self.SMART_LLM)

@@ -63,6 +63,20 @@ class ResearchMemory:
         self.sources.append({"url": url, "content": content, "summary": summary})
         logger.debug("Added source %s (%d content chars)", url, len(content))
 
+    def add_source_no_visit_check(self, url: str, content: str, summary: str = "") -> None:
+        """Add a source that has already been atomically claimed via visited_urls.
+
+        Use this only when the caller has already done:
+            if url not in self.visited_urls:
+                self.visited_urls.add(url)   # atomic claim
+                ...
+                self.add_source_no_visit_check(url, content, summary)
+
+        This skips the duplicate guard so the URL is not double-counted.
+        """
+        self.sources.append({"url": url, "content": content, "summary": summary})
+        logger.debug("Added source %s (%d content chars)", url, len(content))
+
     def is_visited(self, url: str) -> bool:
         """Return True if *url* has already been scraped this run."""
         return url in self.visited_urls

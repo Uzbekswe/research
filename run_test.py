@@ -1,19 +1,10 @@
-# Before running: copy .env.example to .env and fill in at minimum:
-# OPENAI_API_KEY (for default LLM) and TAVILY_API_KEY or leave RETRIEVER=duckduckgo
-#
-# Quick start:
-#   cp .env.example .env
-#   # edit .env — add OPENAI_API_KEY at minimum
-#   python run_test.py
-
 import asyncio
-import os
 
 from dotenv import load_dotenv
 
-load_dotenv()  # load .env before anything reads environment variables
+load_dotenv()
 
-from researcher import DeepResearcher  # noqa: E402  (after dotenv)
+from researcher import DeepResearcher  # noqa: E402
 
 
 async def main():
@@ -30,8 +21,13 @@ async def main():
 
     print("writing report...")
     report = await researcher.write_report()
-    print(report[:500])
-    print("...")
+
+    out = "report.md"
+    with open(out, "w") as f:
+        f.write(report)
+    print(f"Full report saved to {out} ({len(report)} chars)")
+    print()
+    print(report)
     print(f"\nTotal cost: ${researcher.get_costs():.4f}")
 
 
