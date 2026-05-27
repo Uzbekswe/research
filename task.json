@@ -3,7 +3,7 @@
   "max_sections": 3,
   "include_human_feedback": false,
   "follow_guidelines": true,
-  "model": "openai:gpt-4o",
+  "model": "vessl:Qwen/Qwen2.5-7B-Instruct",
   "guidelines": [
     "The report MUST be written in formal academic style",
     "Every factual claim MUST have an inline citation [Source: URL]",
