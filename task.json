@@ -1,0 +1,20 @@
+{
+  "query": "The impact of artificial intelligence on the future of work",
+  "max_sections": 3,
+  "include_human_feedback": false,
+  "follow_guidelines": true,
+  "model": "openai:gpt-4o",
+  "guidelines": [
+    "The report MUST be written in formal academic style",
+    "Every factual claim MUST have an inline citation [Source: URL]",
+    "Each section MUST be at least 300 words",
+    "The report MUST NOT include personal opinions or speculative statements",
+    "All sources MUST be from the last 3 years where possible"
+  ],
+  "publish_formats": {
+    "markdown": true,
+    "pdf": false,
+    "docx": false
+  },
+  "verbose": true
+}
