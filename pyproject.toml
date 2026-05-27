@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "deep-researcher"
+version = "0.1.0"
+description = "Agentic RAG research system"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx",
+    "beautifulsoup4",
+    "python-dotenv",
+    "pydantic",
+    "asyncio",
+    "anthropic",
+    "openai",
+    "google-genai",
+    "langchain-community",
+    "langchain-openai",
+    "sentence-transformers",
+    "numpy",
+    "tiktoken",
+    "langgraph",
+    "python-docx",
+    "md2pdf",
+    "tqdm",
+    "pandas",
+    "pytest",
+    "pytest-asyncio",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
