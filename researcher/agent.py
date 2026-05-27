@@ -19,7 +19,7 @@ from researcher.actions.report_generation import (
 )
 from researcher.actions.web_scraping import browse_web_sources, search_and_scrape
 from researcher.config import Config
-from researcher.context.context_manager import get_research_context
+from researcher.context.context_manager import build_context_store, get_research_context
 from researcher.memory.research_memory import ResearchMemory
 from researcher.prompts import get_agent_role_prompt
 
@@ -107,6 +107,8 @@ class DeepResearcher:
             logger.warning(
                 "Local document mode is not yet implemented. Falling back to web search."
             )
+
+        sub_queries: list[str] = []
 
         if self.source_urls:
             all_scraped = await browse_web_sources(
@@ -214,11 +216,13 @@ class DeepResearcher:
                 total, len(sub_queries),
             )
 
-        # ── 4. Build context string ───────────────────────────────────────
+        # ── 4. Build vector store + retrieve context via similarity search ──
         sources = self.memory.get_context(max_sources=20)
+        store = await build_context_store(sources, self.cfg)
         self.context = await get_research_context(
-            sources=sources,
             query=self.query,
+            sub_queries=sub_queries,
+            store=store,
             cfg=self.cfg,
         )
 

@@ -28,6 +28,9 @@ class Config:
     # Embedding and RAG settings
     EMBEDDING: str = "openai:text-embedding-3-small"
     SIMILARITY_THRESHOLD: float = 0.42
+    MAX_CONTEXT_CHUNKS: int = 50
+    CHUNK_SIZE: int = 400
+    CHUNK_OVERLAP: int = 80
 
     # Report settings
     TOTAL_WORDS: int = 1200
@@ -74,6 +77,9 @@ class Config:
 
         self.EMBEDDING = _str("EMBEDDING", self.EMBEDDING)
         self.SIMILARITY_THRESHOLD = _float("SIMILARITY_THRESHOLD", str(self.SIMILARITY_THRESHOLD))
+        self.MAX_CONTEXT_CHUNKS = _int("MAX_CONTEXT_CHUNKS", str(self.MAX_CONTEXT_CHUNKS))
+        self.CHUNK_SIZE = _int("CHUNK_SIZE", str(self.CHUNK_SIZE))
+        self.CHUNK_OVERLAP = _int("CHUNK_OVERLAP", str(self.CHUNK_OVERLAP))
 
         self.TOTAL_WORDS = _int("TOTAL_WORDS", str(self.TOTAL_WORDS))
         self.REPORT_FORMAT = _str("REPORT_FORMAT", self.REPORT_FORMAT)

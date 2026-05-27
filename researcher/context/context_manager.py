@@ -1,145 +1,120 @@
-"""Research context assembly for the report-writing step.
+"""Research context assembly — embedding-based RAG retrieval.
 
-This module is the bridge between the scraping / summarisation layer and the
-final LLM report call.  It takes all accumulated source dicts and produces a
-single context string that fits within the SMART_LLM token budget.
-
-Layer 1 (current implementation)
----------------------------------
-Simple length-based filtering: sources are concatenated in insertion order
-until the estimated token budget is exhausted.  Token count is approximated
-as ``len(text) / 4`` (the standard GPT-family heuristic).
-
-Layer 3 (planned upgrade)
---------------------------
-Replace the length-based filter with embedding-based similarity ranking:
-
-  1. Embed the research *query* and each source summary / chunk.
-  2. Compute cosine similarity between query embedding and each chunk.
-  3. Rank chunks by similarity score, then fill the token budget greedily
-     from the top of the ranked list.
-
-This ensures the LLM receives the *most relevant* context rather than just
-the *first* context, which is especially important for long research runs
-that accumulate many sources across multiple search iterations.
-
-The vector store (``researcher/vector_store/``) and embeddings layer
-(``researcher/embeddings/``) will supply the infrastructure for Layer 3.
-
-Modelled after gpt_researcher/context/compression.py.
+Replaces the Layer 1 length-based concatenation with proper similarity
+search: content is chunked, embedded, stored in a MemoryVectorStore, then
+retrieved by cosine similarity against the research query and all sub-queries.
 """
 
 import logging
 
 from researcher.config import Config
+from researcher.embeddings import get_embedder
+from researcher.vector_store import MemoryVectorStore
+
+from .chunker import chunk_documents
 
 logger = logging.getLogger(__name__)
 
-# Chars-per-token approximation (GPT-family heuristic: ~4 chars per token).
-_CHARS_PER_TOKEN = 4
 
-
-def _estimate_tokens(text: str) -> int:
-    """Estimate the token count for *text* using the 4-chars-per-token rule."""
-    return len(text) // _CHARS_PER_TOKEN
-
-
-def _format_source(source: dict) -> str:
-    """Render a single source dict as an attributed context block.
-
-    Uses the ``summary`` field when available (shorter, query-focused),
-    falling back to ``content`` when the source was not summarised.
+async def build_context_store(sources: list[dict], cfg: Config) -> MemoryVectorStore:
+    """Chunk and embed all scraped sources into an in-memory vector store.
 
     Args:
-        source: Dict with keys ``"url"``, ``"content"``, ``"summary"``.
+        sources: Source dicts from ResearchMemory with keys
+                 ``"url"``, ``"content"``, ``"summary"``.
+        cfg:     Researcher config supplying EMBEDDING, CHUNK_SIZE, CHUNK_OVERLAP.
 
     Returns:
-        Formatted string ending with a ``---`` divider, or ``""`` when both
-        ``summary`` and ``content`` are empty (so the caller can skip it).
+        Populated :class:`MemoryVectorStore` ready for similarity search.
     """
-    url = source.get("url", "unknown")
-    text = (source.get("summary") or source.get("content", "")).strip()
-    if not text:
-        return ""
-    return f"Source: {url}\n{text}\n\n---\n\n"
+    embedder = get_embedder(cfg.EMBEDDING)
+    store = MemoryVectorStore(embedder)
+
+    if not sources:
+        return store
+
+    # ResearchMemory stores content under "content"; chunk_documents expects
+    # "raw_content" — normalise here so the chunker stays generic.
+    docs_for_chunking = [
+        {"url": s.get("url", ""), "raw_content": s.get("content", "")}
+        for s in sources
+    ]
+
+    chunks, metadatas = chunk_documents(
+        docs_for_chunking,
+        chunk_size=cfg.CHUNK_SIZE,
+        overlap=cfg.CHUNK_OVERLAP,
+    )
+
+    await store.add_documents(chunks, metadatas)
+
+    logger.info(
+        "📦 Built vector store: %d chunks from %d sources",
+        store.get_stats()["total_chunks"],
+        len(sources),
+    )
+    return store
 
 
 async def get_research_context(
-    sources: list[dict],
     query: str,
+    sub_queries: list[str],
+    store: MemoryVectorStore,
     cfg: Config,
 ) -> str:
-    """Assemble a token-budgeted context string from all research sources.
+    """Retrieve the most relevant chunks for the research query.
 
-    Layer 1 implementation: concatenate sources in insertion order, stopping
-    when the estimated token count would exceed the budget.
-
-    # Layer 3: replace this with embedding-based similarity filtering so that
-    # the most query-relevant chunks fill the budget instead of the first N.
+    Runs similarity search for the main *query* and every *sub_query*,
+    deduplicates results by content, sorts by score, and formats the top
+    ``cfg.MAX_CONTEXT_CHUNKS`` into a context string.
 
     Args:
-        sources: List of source dicts, each with keys:
-                 ``"url"`` (str), ``"content"`` (str), ``"summary"`` (str).
-                 Typically the output of :meth:`ResearchMemory.get_context`.
-        query:   The research question (unused in Layer 1; will drive
-                 similarity ranking in Layer 3).
-        cfg:     Researcher configuration.  ``cfg.SMART_TOKEN_LIMIT`` sets
-                 the reference budget; the hard cap is ``3 ×`` that value to
-                 accommodate the full context window.
+        query:       The primary research question.
+        sub_queries: Additional sub-queries generated during research.
+        store:       Populated vector store from :func:`build_context_store`.
+        cfg:         Config supplying SIMILARITY_THRESHOLD, MAX_CONTEXT_CHUNKS.
 
     Returns:
-        A single string of concatenated, attributed source blocks ready to be
-        inserted into the report-generation prompt.  Empty string if
-        *sources* is empty.
+        Assembled context string with attributed ``Source:`` blocks, or ``""``
+        if the store is empty or no chunks pass the similarity threshold.
     """
-    if not sources:
+    if store.get_stats()["total_chunks"] == 0:
         return ""
 
-    # Hard token cap: 3× SMART_TOKEN_LIMIT covers the full context window
-    # while leaving room for the system prompt and the generated report.
-    token_budget = cfg.SMART_TOKEN_LIMIT * 3
-    char_budget = token_budget * _CHARS_PER_TOKEN
+    all_queries = [query] + sub_queries
 
-    logger.debug(
-        "Building context: %d sources, budget ≈ %d tokens (%d chars)",
-        len(sources),
-        token_budget,
-        char_budget,
-    )
+    # Keyed by content to deduplicate identical chunks retrieved via multiple queries.
+    seen: dict[str, dict] = {}
+    total_retrieved = 0
 
-    blocks: list[str] = []
-    total_chars = 0
+    for q in all_queries:
+        results = await store.similarity_search(
+            query=q,
+            k=10,
+            threshold=cfg.SIMILARITY_THRESHOLD,
+        )
+        total_retrieved += len(results)
+        for r in results:
+            content = r["content"]
+            if content not in seen or r["score"] > seen[content]["score"]:
+                seen[content] = r
 
-    for source in sources:
-        block = _format_source(source)
-        if not block:
-            continue  # skip sources with no usable text
+    unique_chunks = sorted(seen.values(), key=lambda r: r["score"], reverse=True)
+    top_chunks = unique_chunks[: cfg.MAX_CONTEXT_CHUNKS]
 
-        block_chars = len(block)
-
-        if total_chars + block_chars > char_budget:
-            logger.debug(
-                "Token budget reached after %d/%d sources (~%d tokens used)",
-                len(blocks),
-                len(sources),
-                _estimate_tokens(str(total_chars)),
-            )
-            break
-
-        blocks.append(block)
-        total_chars += block_chars
-
-    context = "".join(blocks)
-
-    # Belt-and-suspenders hard truncation in case individual blocks are huge.
-    if len(context) > char_budget:
-        context = context[:char_budget]
-        logger.debug("Context hard-truncated to %d chars", char_budget)
+    unique_urls = {c["metadata"].get("url", "") for c in top_chunks}
 
     logger.info(
-        "Context assembled: %d/%d sources, ~%d tokens",
-        len(blocks),
-        len(sources),
-        _estimate_tokens(context),
+        "🎯 Context: %d unique chunks retrieved (from %d total, threshold=%.2f)",
+        len(top_chunks),
+        total_retrieved,
+        cfg.SIMILARITY_THRESHOLD,
     )
-    return context
+    logger.info("   Covering %d unique sources", len(unique_urls))
+
+    blocks: list[str] = []
+    for chunk in top_chunks:
+        url = chunk["metadata"].get("url", "unknown")
+        blocks.append(f"Source: {url}\n{chunk['content']}\n\n---\n\n")
+
+    return "".join(blocks)
