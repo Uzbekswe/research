@@ -22,6 +22,7 @@ from researcher.config import Config
 from researcher.context.context_manager import build_context_store, get_research_context
 from researcher.memory.research_memory import ResearchMemory
 from researcher.prompts import get_agent_role_prompt
+from researcher.vector_store import MemoryVectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,10 @@ class DeepResearcher:
 
         # context is a string after conduct_research(); empty until then.
         self.context: str = ""
+
+        # Set by conduct_research(); accessible via getters below.
+        self.sub_queries: list[str] = []
+        self.vector_store: MemoryVectorStore | None = None
 
         # Mirrors GPT Researcher for API compatibility.
         self.research_costs: float = 0.0
@@ -216,15 +221,22 @@ class DeepResearcher:
                 total, len(sub_queries),
             )
 
-        # ── 4. Build vector store + retrieve context via similarity search ──
-        sources = self.memory.get_context(max_sources=20)
-        store = await build_context_store(sources, self.cfg)
-        self.context = await get_research_context(
-            query=self.query,
-            sub_queries=sub_queries,
-            store=store,
-            cfg=self.cfg,
-        )
+        # ── 4. Layer 3: embedding-based context filtering ────────────────
+        self.sub_queries = sub_queries
+        raw_sources = self.memory.get_context()
+
+        if raw_sources:
+            logger.info("🔢 Building embeddings for %d sources...", len(raw_sources))
+            self.vector_store = await build_context_store(raw_sources, self.cfg)
+            self.context = await get_research_context(
+                query=self.query,
+                sub_queries=sub_queries,
+                store=self.vector_store,
+                cfg=self.cfg,
+            )
+        else:
+            self.context = ""
+            logger.info("⚠️ No sources to embed — context is empty")
 
         elapsed = time.monotonic() - start_time
         logger.info("📊 Context length: ~%d tokens", len(self.context) // 4)
@@ -321,6 +333,14 @@ class DeepResearcher:
     def get_research_images(self) -> list[str]:
         """Return all image URLs collected from scraped pages."""
         return self.memory.images
+
+    def get_sub_queries(self) -> list[str]:
+        """Return the sub-queries generated during :meth:`conduct_research`."""
+        return self.sub_queries
+
+    def get_vector_store(self) -> MemoryVectorStore | None:
+        """Return the populated vector store, or None before research runs."""
+        return self.vector_store
 
     # ------------------------------------------------------------------
     # Setters
