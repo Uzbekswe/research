@@ -1,23 +1,30 @@
+# HTTP / scraping
 httpx
 beautifulsoup4
-python-dotenv
-pydantic
-asyncio
+# Search retrievers
 ddgs
 tavily-python
-json-repair
+# LLM providers
 anthropic
 openai
 google-genai
+# LangChain / orchestration
 langchain-community
 langchain-openai
+langgraph
+# Embeddings / vector
 sentence-transformers
 numpy
 tiktoken
-langgraph
-python-docx
-md2pdf
+# Utilities
+python-dotenv
+pydantic
+json-repair
 tqdm
 pandas
+# Document export
+python-docx
+md2pdf
+# Testing
 pytest
 pytest-asyncio

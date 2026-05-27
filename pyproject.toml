@@ -8,27 +8,34 @@ version = "0.1.0"
 description = "Agentic RAG research system"
 requires-python = ">=3.11"
 dependencies = [
+    # HTTP / scraping
     "httpx",
     "beautifulsoup4",
-    "python-dotenv",
-    "pydantic",
-    "asyncio",
-    "ddgs",
+    # Search retrievers
+    "ddgs",                  # DuckDuckGo (replaces deprecated duckduckgo-search)
     "tavily-python",
-    "json-repair",
+    # LLM providers
     "anthropic",
     "openai",
-    "google-genai",
+    "google-genai",          # Google Gemini (replaces deprecated google-generativeai)
+    # LangChain / orchestration
     "langchain-community",
     "langchain-openai",
+    "langgraph",
+    # Embeddings / vector
     "sentence-transformers",
     "numpy",
     "tiktoken",
-    "langgraph",
-    "python-docx",
-    "md2pdf",
+    # Utilities
+    "python-dotenv",
+    "pydantic",
+    "json-repair",
     "tqdm",
     "pandas",
+    # Document export
+    "python-docx",
+    "md2pdf",
+    # Testing
     "pytest",
     "pytest-asyncio",
 ]

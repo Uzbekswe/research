@@ -43,7 +43,9 @@ _NOISE_CLASS_FRAGMENTS = [
 
 # These tags anchor the document structure and must never be decomposed by
 # class-based removal, even if a fragment accidentally matches their classes.
-_PROTECTED_TAGS = frozenset({"html", "body", "main", "article", "section", "div"})
+# "div" is intentionally absent: generic divs with sidebar/ad class names should
+# be removed. Only true document-root elements are protected.
+_PROTECTED_TAGS = frozenset({"html", "body", "main", "article", "section"})
 
 # Ordered list of (tag, attrs) pairs tried when hunting for the main content.
 # The first match wins.
