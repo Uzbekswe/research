@@ -1,0 +1,26 @@
+question,gold_answer,category
+What year was the Transformer architecture introduced and in which paper?,"The Transformer was introduced in 2017 in the paper ""Attention Is All You Need"" by Vaswani et al.",ai_ml
+What does RAG stand for in the context of large language models?,"RAG stands for Retrieval-Augmented Generation, a technique that combines retrieval of external documents with language model generation.",ai_ml
+What is the name of OpenAI's reinforcement learning from human feedback technique used to align GPT models?,The technique is called RLHF (Reinforcement Learning from Human Feedback).,ai_ml
+What is the context window size of GPT-4 Turbo in tokens?,"GPT-4 Turbo has a context window of 128,000 tokens.",ai_ml
+What Python library did Hugging Face release for training and sharing transformer models?,Hugging Face released the Transformers library (also known as huggingface/transformers).,ai_ml
+What does SOLID stand for in software engineering principles?,"SOLID stands for Single responsibility, Open-closed, Liskov substitution, Interface segregation, and Dependency inversion.",software_engineering
+What is the time complexity of binary search?,Binary search has a time complexity of O(log n).,software_engineering
+What does REST stand for in web API design?,REST stands for Representational State Transfer.,software_engineering
+What is the CAP theorem in distributed systems?,"The CAP theorem states that a distributed system can only guarantee two of three properties simultaneously: Consistency, Availability, and Partition tolerance.",software_engineering
+What is the difference between a process and a thread?,"A process is an independent program with its own memory space, while a thread is a lightweight unit of execution that shares memory with other threads within the same process.",software_engineering
+What is the speed of light in a vacuum in meters per second?,"The speed of light in a vacuum is approximately 299,792,458 meters per second (about 3 × 10^8 m/s).",science_facts
+What element has the atomic number 79?,Gold (Au) has atomic number 79.,science_facts
+What is the powerhouse of the cell?,"The mitochondria is the powerhouse of the cell, responsible for producing ATP through cellular respiration.",science_facts
+What is the half-life of Carbon-14?,"Carbon-14 has a half-life of approximately 5,730 years.",science_facts
+What causes the Aurora Borealis?,"The Aurora Borealis is caused by charged particles from the sun interacting with Earth's magnetic field and atmosphere, exciting atmospheric gases which then emit light.",science_facts
+In what year did the Berlin Wall fall?,"The Berlin Wall fell in 1989, specifically on November 9, 1989.",history_geography
+What is the capital city of South Korea?,Seoul is the capital city of South Korea.,history_geography
+Who invented the World Wide Web?,Tim Berners-Lee invented the World Wide Web in 1989 while working at CERN.,history_geography
+What year was the United Nations founded?,The United Nations was founded in 1945.,history_geography
+What is the longest river in the world?,"The Nile River in Africa is traditionally considered the longest river in the world at approximately 6,650 kilometers.",history_geography
+What programming language was Python named after?,"Python was named after the British comedy group Monty Python, not the snake.",tech_companies
+In what year was GitHub founded?,"GitHub was founded in 2008 by Tom Preston-Werner, Chris Wanstrath, P. J. Hyett, and Scott Chacon.",tech_companies
+What does API stand for?,API stands for Application Programming Interface.,tech_companies
+What company developed the React JavaScript library?,React was developed by Facebook (now Meta) and released as open source in 2013.,tech_companies
+What does GPU stand for and which company popularized its use in deep learning?,"GPU stands for Graphics Processing Unit. NVIDIA popularized its use in deep learning, particularly with their CUDA platform.",tech_companies

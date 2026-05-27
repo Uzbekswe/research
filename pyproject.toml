@@ -11,6 +11,7 @@ dependencies = [
     # HTTP / scraping
     "httpx",
     "beautifulsoup4",
+    "python-multipart",       # required by FastAPI for form handling
     # Search retrievers
     "ddgs",                  # DuckDuckGo (replaces deprecated duckduckgo-search)
     "tavily-python",
@@ -32,6 +33,9 @@ dependencies = [
     "json-repair",
     "tqdm",
     "pandas",
+    # API server
+    "fastapi",
+    "uvicorn[standard]",
     # Document export
     "python-docx",
     "md2pdf",
