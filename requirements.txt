@@ -5,6 +5,7 @@ pydantic
 asyncio
 ddgs
 tavily-python
+json-repair
 anthropic
 openai
 google-genai
