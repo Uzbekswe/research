@@ -475,6 +475,136 @@ def get_report_by_type(report_type: str) -> Callable:
 
 
 # ---------------------------------------------------------------------------
+# Orchestrator prompts — moved here so EVERY prompt lives in one file (Phase 3B)
+# ---------------------------------------------------------------------------
+
+
+def get_plan_outline_prompt(query: str, initial_research: str, max_sections: int) -> str:
+    """Prompt for EditorAgent.plan_research (STRATEGIC_LLM)."""
+    return f"""You are a research editor planning a structured report.
+
+Research query: {query}
+
+Initial research context:
+{initial_research[:3000]}
+
+Plan a report outline with exactly {max_sections} main sections.
+
+Rules:
+- Each section title must be specific and non-overlapping
+- Do NOT include Introduction, Conclusion, References, or Summary as sections
+- Sections should together form a comprehensive answer to the query
+- Make section titles concise (5-10 words each)
+
+Respond with a JSON object:
+{{
+  "title": "Full report title here",
+  "sections": ["Section 1 Title", "Section 2 Title", "Section 3 Title"]
+}}"""
+
+
+def get_section_review_prompt(
+    topic: str,
+    guidelines: list[str],
+    draft: str,
+    revision_notes: str,
+) -> str:
+    """Prompt for ReviewerAgent.run (SMART_LLM)."""
+    guidelines_text = "\n".join(f"- {g}" for g in guidelines)
+    return f"""You are a strict research editor reviewing a draft section.
+
+Section topic: {topic}
+
+Quality guidelines that MUST be met:
+{guidelines_text}
+
+Draft to review:
+{draft[:3000]}
+
+Previous revision notes (if any):
+{revision_notes[:500] if revision_notes else "None"}
+
+Your task:
+1. Check if the draft meets EVERY guideline listed above
+2. If it meets all guidelines: respond with exactly the word: APPROVED
+3. If it fails any guideline: respond with specific, actionable revision notes
+
+Be specific. Say exactly what is missing and how to fix it.
+If only minor issues remain, approve anyway (perfect is the enemy of good).
+
+Your response (APPROVED or revision notes):"""
+
+
+def get_section_revise_prompt(topic: str, draft: str, review: str) -> str:
+    """Prompt for ReviserAgent.run (SMART_LLM)."""
+    return f"""You are a research writer revising a section draft.
+
+Section topic: {topic}
+
+Current draft:
+{draft}
+
+Reviewer feedback (you MUST address all points):
+{review}
+
+Instructions:
+- Rewrite the draft to address ALL reviewer feedback
+- Keep all correct content from the original draft
+- Do not remove information that was not criticized
+- Maintain the same approximate length or longer
+- Write in formal academic style
+- Keep all source citations that were in the original
+
+Revised draft:"""
+
+
+def get_report_introduction_prompt(
+    title: str,
+    query: str,
+    section_titles: list[str],
+) -> str:
+    """Prompt for WriterAgent intro generation (SMART_LLM)."""
+    section_list = "\n".join(f"- {s}" for s in section_titles)
+    return f"""Write a 2-3 paragraph introduction for a research report.
+
+Report title: {title}
+Query: {query}
+
+The report covers these sections:
+{section_list}
+
+Write only the introduction paragraphs. No heading needed."""
+
+
+def get_report_conclusion_prompt(
+    title: str,
+    query: str,
+    sections_text: str,
+) -> str:
+    """Prompt for WriterAgent conclusion generation (SMART_LLM)."""
+    return f"""Write a 2-3 paragraph conclusion for this research report.
+
+Report title: {title}
+Query: {query}
+
+Report content summary:
+{sections_text[:4000]}
+
+Write only the conclusion paragraphs. No heading needed.
+Synthesize key findings. Do not introduce new information."""
+
+
+def get_short_conclusion_prompt(query: str, report_body: str) -> str:
+    """Prompt for researcher.actions.report_generation.write_report_conclusion (FAST_LLM)."""
+    return (
+        f"Based on the research report below, write a concise conclusion (2–3 paragraphs) "
+        f"that summarises the main findings and their implications for the question: \"{query}\"\n\n"
+        f"If the report does not already end with a '## Conclusion' heading, prepend one.\n\n"
+        f"Report:\n{report_body}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Retriever registry  (not an LLM prompt — config helper)
 # ---------------------------------------------------------------------------
 

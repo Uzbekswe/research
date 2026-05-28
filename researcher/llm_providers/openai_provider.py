@@ -29,6 +29,8 @@ class OpenAIProvider(BaseLLMProvider):
         )
 
     async def get_chat_response(self, messages: list[dict], max_tokens: int) -> str:
+        # OPUS FIX: reset usage at start so a failed call leaves clean state.
+        self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0}
         for attempt in range(_MAX_RETRIES):
             try:
                 response = await self.client.chat.completions.create(
@@ -45,11 +47,18 @@ class OpenAIProvider(BaseLLMProvider):
                         usage.completion_tokens,
                         usage.total_tokens,
                     )
+                    # OPUS FIX (3I): expose tokens so the agent can compute cost.
+                    self.last_usage = {
+                        "prompt_tokens": usage.prompt_tokens,
+                        "completion_tokens": usage.completion_tokens,
+                    }
                 return response.choices[0].message.content or ""
 
-            except openai.RateLimitError as exc:
+            except openai.RateLimitError:
                 if attempt == _MAX_RETRIES - 1:
                     raise
                 delay = _RETRY_BASE_DELAY * (2**attempt)
                 logger.warning("rate limit hit, retrying in %.1fs (attempt %d/%d)", delay, attempt + 1, _MAX_RETRIES)
                 await asyncio.sleep(delay)
+        # OPUS FIX: explicit fallthrough — should never happen, but reassures type checker.
+        raise RuntimeError("OpenAI retry loop exited without returning a value")

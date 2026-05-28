@@ -31,16 +31,18 @@ class WriterAgent:
             if item.get("draft")
         )
 
+        # OPUS FIX (3B): use the centralised prompt templates instead of inline strings.
+        from researcher.prompts import (
+            get_report_conclusion_prompt,
+            get_report_introduction_prompt,
+        )
+
         # ── Introduction ──────────────────────────────────────────────
-        intro_prompt = f"""Write a 2-3 paragraph introduction for a research report.
-
-Report title: {title}
-Query: {task['query']}
-
-The report covers these sections:
-{chr(10).join(f"- {item['section']}" for item in research_data)}
-
-Write only the introduction paragraphs. No heading needed."""
+        intro_prompt = get_report_introduction_prompt(
+            title=title,
+            query=task["query"],
+            section_titles=[item["section"] for item in research_data],
+        )
 
         introduction = await call_model(
             prompt=intro_prompt,
@@ -50,16 +52,11 @@ Write only the introduction paragraphs. No heading needed."""
         )
 
         # ── Conclusion ────────────────────────────────────────────────
-        conclusion_prompt = f"""Write a 2-3 paragraph conclusion for this research report.
-
-Report title: {title}
-Query: {task['query']}
-
-Report content summary:
-{sections_text[:4000]}
-
-Write only the conclusion paragraphs. No heading needed.
-Synthesize key findings. Do not introduce new information."""
+        conclusion_prompt = get_report_conclusion_prompt(
+            title=title,
+            query=task["query"],
+            sections_text=sections_text,
+        )
 
         conclusion = await call_model(
             prompt=conclusion_prompt,
@@ -72,8 +69,26 @@ Synthesize key findings. Do not introduce new information."""
         all_sources: list[str] = []
         for item in research_data:
             all_sources.extend(item.get("sources", []))
+        # OPUS FIX: also fold in sources already accumulated on the shared state
+        # by the editor's run_parallel_research, so we don't lose them.
+        all_sources.extend(state.get("sources", []) or [])
         # dict.fromkeys preserves insertion order while deduplicating
         all_sources = list(dict.fromkeys(all_sources))
+
+        # OPUS FIX (3F): populate table_of_contents and headers so ResearchState
+        # is fully filled in — matches GPT Researcher's writer contract.
+        toc_lines = ["## Table of Contents", ""]
+        for i, item in enumerate(research_data, 1):
+            anchor = item["section"].lower().replace(" ", "-")
+            toc_lines.append(f"{i}. [{item['section']}](#{anchor})")
+        table_of_contents = "\n".join(toc_lines)
+
+        headers = {
+            "introduction": "## Introduction",
+            "table_of_contents": "## Table of Contents",
+            "conclusion": "## Conclusion",
+            "references": "## References",
+        }
 
         print_agent_output("Report compilation complete.", "WRITER")
 
@@ -81,4 +96,6 @@ Synthesize key findings. Do not introduce new information."""
             "introduction": introduction,
             "conclusion": conclusion,
             "sources": all_sources,
+            "table_of_contents": table_of_contents,
+            "headers": headers,
         }

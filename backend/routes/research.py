@@ -134,12 +134,12 @@ async def list_research_tasks(limit: int = 10):
 @router.delete("/{task_id}", status_code=204)
 async def delete_task(task_id: str):
     """Remove a completed task from the store."""
-    task = await task_manager.get_task(task_id)
-    if not task:
+    # OPUS FIX: use the lock-protected TaskManager.delete_task instead of
+    # reaching into the private _tasks/_logs dicts directly. The previous code
+    # bypassed self._lock and could race with concurrent set_running/set_complete.
+    existed = await task_manager.delete_task(task_id)
+    if not existed:
         raise HTTPException(status_code=404, detail="Task not found")
-    # Simple removal — in production you'd also cancel running tasks
-    task_manager._tasks.pop(task_id, None)
-    task_manager._logs.pop(task_id, None)
 
 
 @router.websocket("/{task_id}/stream")

@@ -38,6 +38,8 @@ class GoogleProvider(BaseLLMProvider):
         return "\n\n".join(system_parts), contents
 
     async def get_chat_response(self, messages: list[dict], max_tokens: int) -> str:
+        # OPUS FIX: reset usage at start so a failed call leaves clean state.
+        self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0}
         system_instruction, contents = self._to_gemini_contents(messages)
 
         config = types.GenerateContentConfig(
@@ -60,5 +62,12 @@ class GoogleProvider(BaseLLMProvider):
                 usage.candidates_token_count,
                 usage.total_token_count,
             )
+            # OPUS FIX (3I): expose tokens for cost tracking.
+            self.last_usage = {
+                "prompt_tokens": usage.prompt_token_count or 0,
+                "completion_tokens": usage.candidates_token_count or 0,
+            }
 
-        return response.text
+        # OPUS FIX: response.text may be None when the model returns no candidates;
+        # the public signature promises a str so coerce.
+        return response.text or ""

@@ -7,7 +7,11 @@ import logging
 
 from researcher.config import Config
 from researcher.llm_providers import get_llm_provider
-from researcher.prompts import get_report_by_type, get_summarize_prompt
+from researcher.prompts import (
+    get_report_by_type,
+    get_short_conclusion_prompt,
+    get_summarize_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +102,8 @@ async def write_report(
         provider = get_llm_provider(cfg.SMART_LLM, cfg.TEMPERATURE, cfg.SMART_TOKEN_LIMIT)
         report = await provider.get_chat_response(messages, max_tokens=cfg.SMART_TOKEN_LIMIT)
         if cost_callback:
-            cost_callback({"llm": cfg.SMART_LLM, "tokens": 0})
+            # OPUS FIX (3I): forward real token counts.
+            cost_callback({"llm": cfg.SMART_LLM, **provider.last_usage})
         return report
     except Exception as exc:
         logger.error("write_report failed: %s", exc)
@@ -125,19 +130,16 @@ async def write_report_conclusion(
     Returns:
         A conclusion section string (plain Markdown), or ``""`` on failure.
     """
-    prompt = (
-        f"Based on the research report below, write a concise conclusion (2–3 paragraphs) "
-        f"that summarises the main findings and their implications for the question: \"{query}\"\n\n"
-        f"If the report does not already end with a '## Conclusion' heading, prepend one.\n\n"
-        f"Report:\n{report_body}"
-    )
+    # OPUS FIX (3B): use the centralised prompt template instead of an inline string.
+    prompt = get_short_conclusion_prompt(query=query, report_body=report_body)
     messages = [{"role": "user", "content": prompt}]
 
     try:
         provider = get_llm_provider(cfg.FAST_LLM, cfg.TEMPERATURE, cfg.SUMMARY_TOKEN_LIMIT)
         conclusion = await provider.get_chat_response(messages, max_tokens=cfg.SUMMARY_TOKEN_LIMIT)
         if cost_callback:
-            cost_callback({"llm": cfg.FAST_LLM, "tokens": 0})
+            # OPUS FIX (3I): forward real token counts.
+            cost_callback({"llm": cfg.FAST_LLM, **provider.last_usage})
         return conclusion
     except Exception as exc:
         logger.error("write_report_conclusion failed: %s", exc)
@@ -182,7 +184,8 @@ async def summarize_url(
         provider = get_llm_provider(cfg.FAST_LLM, cfg.TEMPERATURE, cfg.SUMMARY_TOKEN_LIMIT)
         summary = await provider.get_chat_response(messages, max_tokens=cfg.SUMMARY_TOKEN_LIMIT)
         if cost_callback:
-            cost_callback({"llm": cfg.FAST_LLM, "tokens": 0})
+            # OPUS FIX (3I): forward real token counts.
+            cost_callback({"llm": cfg.FAST_LLM, **provider.last_usage})
     except Exception as exc:
         logger.error("summarize_url failed for %s: %s", url, exc)
         return ""

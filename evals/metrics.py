@@ -44,7 +44,8 @@ class EvalMetrics:
 
 def compute_metrics(
     results: list[GradeResult],
-    categories: list[str] = None,
+    # OPUS FIX: list[str] | None matches the actual nullable default.
+    categories: list[str] | None = None,
 ) -> EvalMetrics:
     """
     Computes all evaluation metrics from a list of graded results.

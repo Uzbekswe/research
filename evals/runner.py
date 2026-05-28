@@ -108,7 +108,8 @@ async def evaluate_single_question(
 
 async def run_evaluation(
     num_examples: int = 25,
-    categories: list[str] = None,
+    # OPUS FIX: list[str] | None matches the actual nullable default.
+    categories: list[str] | None = None,
     max_concurrent: int = 3,
     dataset_path: str = "evals/dataset/eval_questions.csv",
     output_path: str = "evals/results",

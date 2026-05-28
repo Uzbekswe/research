@@ -39,37 +39,22 @@ class ReviewerAgent:
 
         # Guard against infinite revision loops
         revision_count = len([r for r in revision_notes.split("REVISION") if r.strip()])
-        max_revisions = task.get("max_revisions", 2)
+        # OPUS FIX (3G): read MAX_REVISIONS from config when the task dict doesn't override.
+        max_revisions = task.get("max_revisions", cfg.MAX_REVISIONS)
         if revision_count >= max_revisions:
             log_research_progress(
                 topic, "approved", f"max revisions ({max_revisions}) reached"
             )
             return {"review": None}
 
-        guidelines_text = "\n".join(f"- {g}" for g in guidelines)
-
-        prompt = f"""You are a strict research editor reviewing a draft section.
-
-Section topic: {topic}
-
-Quality guidelines that MUST be met:
-{guidelines_text}
-
-Draft to review:
-{draft[:3000]}
-
-Previous revision notes (if any):
-{revision_notes[:500] if revision_notes else "None"}
-
-Your task:
-1. Check if the draft meets EVERY guideline listed above
-2. If it meets all guidelines: respond with exactly the word: APPROVED
-3. If it fails any guideline: respond with specific, actionable revision notes
-
-Be specific. Say exactly what is missing and how to fix it.
-If only minor issues remain, approve anyway (perfect is the enemy of good).
-
-Your response (APPROVED or revision notes):"""
+        # OPUS FIX (3B): use the centralised prompt template instead of an inline string.
+        from researcher.prompts import get_section_review_prompt
+        prompt = get_section_review_prompt(
+            topic=topic,
+            guidelines=guidelines,
+            draft=draft,
+            revision_notes=revision_notes,
+        )
 
         response = await call_model(
             prompt=prompt,

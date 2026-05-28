@@ -40,12 +40,18 @@ class PublisherAgent:
             "",
         ]
 
-        # Table of contents
-        report_parts += ["## Table of Contents", ""]
-        for i, item in enumerate(research_data, 1):
-            anchor = item["section"].lower().replace(" ", "-")
-            report_parts.append(f"{i}. [{item['section']}](#{anchor})")
-        report_parts.append("")
+        # OPUS FIX (3F): prefer the writer-supplied table_of_contents when present so
+        # the writer is authoritative for headers/TOC; fall back to inline assembly
+        # for backwards-compat with callers that bypass the writer.
+        toc = state.get("table_of_contents") or ""
+        if toc:
+            report_parts += [toc, ""]
+        else:
+            report_parts += ["## Table of Contents", ""]
+            for i, item in enumerate(research_data, 1):
+                anchor = item["section"].lower().replace(" ", "-")
+                report_parts.append(f"{i}. [{item['section']}](#{anchor})")
+            report_parts.append("")
 
         # Main sections
         for item in research_data:

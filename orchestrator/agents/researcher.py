@@ -87,8 +87,12 @@ class ResearchAgent:
 
         log_research_progress(topic, "complete", f"{len(sources)} sources")
 
+        # OPUS FIX: return the per-section sources so the editor can aggregate them
+        # into ResearchState.sources. Before this, source URLs were discarded after
+        # each sub-graph completed and the final report had no references list.
         return {
             "draft": draft,
             "revision_notes": "",
             "review": None,
+            "sources": sources,
         }
