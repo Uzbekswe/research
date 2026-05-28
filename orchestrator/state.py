@@ -23,7 +23,7 @@ class ResearchState(TypedDict):
     report: str                 # final assembled report
 
 
-class DraftState(TypedDict):
+class DraftState(TypedDict, total=False):
     """Isolated state for the per-section sub-graph.
 
     One DraftState instance per section — running concurrently.
@@ -36,3 +36,7 @@ class DraftState(TypedDict):
     review: str | None      # None = approved, string = revision notes
     revision_notes: str     # accumulated history of all revision notes
     guidelines: list[str]   # quality criteria the reviewer checks against
+    # OPUS FIX: sub-graph propagates URLs so the editor can aggregate them
+    # into ResearchState.sources. Optional via total=False so existing call
+    # sites that don't seed this key are not type-broken.
+    sources: list[str]

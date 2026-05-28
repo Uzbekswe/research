@@ -353,16 +353,32 @@ class DeepResearcher:
     def add_costs(self, cost) -> None:
         """Accumulate LLM cost.
 
-        Accepts either a ``float`` (direct cost value) or a ``dict`` produced
-        by the action-layer cost callbacks (``{"llm": str, "tokens": int, ...}``).
-        Dict costs are summed from a ``"cost"`` key if present; otherwise 0.0
-        is added (token counts aren't yet converted to currency).
+        Accepts either a ``float`` (direct cost value) or a ``dict`` from the
+        action-layer cost callbacks. The dict shape produced by providers is
+        ``{"llm": str, "prompt_tokens": int, "completion_tokens": int}`` — this
+        method computes USD from those token counts via the pricing table.
+        A pre-computed ``"cost"`` key is honoured when present for forward
+        compatibility.
 
         Args:
             cost: A float cost value, or a dict from a cost_callback.
         """
+        # OPUS FIX (3I): actually compute USD from token counts. Before this fix
+        # cost_callbacks always passed {"tokens": 0} and the dict branch fell back
+        # to 0.0, so get_costs() always returned 0.0.
+        from researcher.llm_providers.pricing import estimate_cost
+
         if isinstance(cost, dict):
-            amount = float(cost.get("cost", 0.0))
+            if "cost" in cost:
+                amount = float(cost.get("cost", 0.0))
+            else:
+                model = cost.get("llm", "")
+                _, _, model_name = model.partition(":") if ":" in model else ("", "", model)
+                amount = estimate_cost(
+                    model=model_name,
+                    prompt_tokens=int(cost.get("prompt_tokens", 0) or 0),
+                    completion_tokens=int(cost.get("completion_tokens", 0) or 0),
+                )
         else:
             try:
                 amount = float(cost)

@@ -65,7 +65,8 @@ async def get_sub_queries(
         provider = get_llm_provider(cfg.STRATEGIC_LLM, cfg.TEMPERATURE, cfg.STRATEGIC_TOKEN_LIMIT)
         response = await provider.get_chat_response(messages, max_tokens=cfg.STRATEGIC_TOKEN_LIMIT)
         if cost_callback:
-            cost_callback({"llm": cfg.STRATEGIC_LLM, "tokens": 0})
+            # OPUS FIX (3I): forward real token counts from the provider, not a placeholder zero.
+            cost_callback({"llm": cfg.STRATEGIC_LLM, **provider.last_usage})
     except Exception as exc:
         logger.warning("STRATEGIC_LLM failed for sub-query generation: %s — falling back to SMART_LLM", exc)
 
@@ -74,7 +75,8 @@ async def get_sub_queries(
             provider = get_llm_provider(cfg.SMART_LLM, cfg.TEMPERATURE, cfg.SMART_TOKEN_LIMIT)
             response = await provider.get_chat_response(messages, max_tokens=cfg.SMART_TOKEN_LIMIT)
             if cost_callback:
-                cost_callback({"llm": cfg.SMART_LLM, "tokens": 0})
+                # OPUS FIX (3I): forward real token counts.
+                cost_callback({"llm": cfg.SMART_LLM, **provider.last_usage})
         except Exception as exc2:
             logger.error("SMART_LLM fallback also failed: %s — returning original query", exc2)
             return [query]

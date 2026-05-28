@@ -26,4 +26,7 @@ class VesslProvider(BaseLLMProvider):
         )
 
     async def get_chat_response(self, messages: list[dict], max_tokens: int) -> str:
-        return await self._delegate.get_chat_response(messages, max_tokens)
+        result = await self._delegate.get_chat_response(messages, max_tokens)
+        # OPUS FIX (3I): forward token usage so the unified cost path works.
+        self.last_usage = self._delegate.last_usage
+        return result

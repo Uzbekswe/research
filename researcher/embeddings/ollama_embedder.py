@@ -6,6 +6,9 @@ from .base import BaseEmbedder
 
 _OLLAMA_URL = "http://localhost:11434/api/embeddings"
 _SEMAPHORE_LIMIT = 5
+# OPUS FIX: every external HTTP call gets an explicit timeout. Embedding large
+# batches against a slow local Ollama instance can otherwise hang the pipeline.
+_REQUEST_TIMEOUT = 30.0
 
 _DIMENSIONS: dict[str, int] = {
     "nomic-embed-text": 1024,
@@ -17,7 +20,8 @@ class OllamaEmbedder(BaseEmbedder):
         self.model = model
 
     async def embed_query(self, text: str) -> list[float]:
-        async with httpx.AsyncClient() as client:
+        # OPUS FIX: AsyncClient with explicit timeout — prevents indefinite hangs.
+        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT) as client:
             response = await client.post(
                 _OLLAMA_URL,
                 json={"model": self.model, "prompt": text},

@@ -39,6 +39,9 @@ class Config:
     MAX_ITERATIONS: int = 3
     MAX_SUBTOPICS: int = 3
     MAX_SECTIONS: int = 3
+    # OPUS FIX (3G): MAX_REVISIONS lives in config so the sub-graph guard is
+    # not hidden inside per-task overrides. Task dict can still override.
+    MAX_REVISIONS: int = 2
 
     # Source settings
     REPORT_SOURCE: str = "web"
@@ -87,6 +90,8 @@ class Config:
         self.MAX_ITERATIONS = _int("MAX_ITERATIONS", str(self.MAX_ITERATIONS))
         self.MAX_SUBTOPICS = _int("MAX_SUBTOPICS", str(self.MAX_SUBTOPICS))
         self.MAX_SECTIONS = _int("MAX_SECTIONS", str(self.MAX_SECTIONS))
+        # OPUS FIX (3G): expose MAX_REVISIONS as env var so the sub-graph guard is tunable.
+        self.MAX_REVISIONS = _int("MAX_REVISIONS", str(self.MAX_REVISIONS))
 
         self.REPORT_SOURCE = _str("REPORT_SOURCE", self.REPORT_SOURCE)
         self.DOC_PATH = _str("DOC_PATH", self.DOC_PATH)

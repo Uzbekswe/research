@@ -27,25 +27,9 @@ class ReviserAgent:
 
         log_research_progress(topic, "revising")
 
-        prompt = f"""You are a research writer revising a section draft.
-
-Section topic: {topic}
-
-Current draft:
-{draft}
-
-Reviewer feedback (you MUST address all points):
-{review}
-
-Instructions:
-- Rewrite the draft to address ALL reviewer feedback
-- Keep all correct content from the original draft
-- Do not remove information that was not criticized
-- Maintain the same approximate length or longer
-- Write in formal academic style
-- Keep all source citations that were in the original
-
-Revised draft:"""
+        # OPUS FIX (3B): use the centralised prompt template instead of an inline string.
+        from researcher.prompts import get_section_revise_prompt
+        prompt = get_section_revise_prompt(topic=topic, draft=draft, review=review)
 
         revised_draft = await call_model(
             prompt=prompt,

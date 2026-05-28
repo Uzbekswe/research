@@ -98,11 +98,29 @@ def _clean_soup(soup: BeautifulSoup) -> BeautifulSoup:
 
 
 def _find_content_node(soup: BeautifulSoup) -> Tag | None:
-    """Return the most specific content container, or None for full body."""
+    """Return the most specific content container, or None for full body.
+
+    Priority order (matches GPT Researcher):
+      1. <article>
+      2. <main>
+      3. semantic content divs (class="content", id="main", role="main" …)
+      4. OPUS FIX (3H): largest <div> by text-content length (covers sites that
+         render content in generic divs with no semantic markers)
+      5. <body> fallback
+    """
     for tag_name, attrs in _CONTENT_SELECTORS:
         node = soup.find(tag_name, attrs)
         if node and isinstance(node, Tag):
             return node
+
+    # OPUS FIX (3H): largest <div> by text-content length — handles content sites
+    # that wrap their article in generic <div> elements with no semantic markers.
+    divs = soup.find_all("div")
+    if divs:
+        largest = max(divs, key=lambda d: len(d.get_text(strip=True)), default=None)
+        if largest is not None and len(largest.get_text(strip=True)) > 200:
+            return largest
+
     return soup.find("body")
 
 

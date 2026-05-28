@@ -21,10 +21,11 @@ class HuggingFaceEmbedder(BaseEmbedder):
 
     async def embed_documents(self, texts: list[str]) -> list[list[float]]:
         model = self._get_model()
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            lambda: model.encode(texts, convert_to_numpy=True, show_progress_bar=False),
+        # OPUS FIX: asyncio.get_event_loop() is deprecated in 3.10+ and raises in
+        # 3.12 when there is no running loop. asyncio.to_thread is the supported
+        # equivalent and works with run_in_executor's default thread pool.
+        result = await asyncio.to_thread(
+            model.encode, texts, convert_to_numpy=True, show_progress_bar=False
         )
         return result.tolist()
 

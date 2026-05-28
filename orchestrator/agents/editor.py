@@ -57,26 +57,11 @@ class EditorAgent:
 
         print_agent_output(f"Planning research outline for: {query}", "EDITOR")
 
-        prompt = f"""You are a research editor planning a structured report.
-
-Research query: {query}
-
-Initial research context:
-{initial_research[:3000]}
-
-Plan a report outline with exactly {max_sections} main sections.
-
-Rules:
-- Each section title must be specific and non-overlapping
-- Do NOT include Introduction, Conclusion, References, or Summary as sections
-- Sections should together form a comprehensive answer to the query
-- Make section titles concise (5-10 words each)
-
-Respond with a JSON object:
-{{
-  "title": "Full report title here",
-  "sections": ["Section 1 Title", "Section 2 Title", "Section 3 Title"]
-}}"""
+        # OPUS FIX (3B): use the centralised prompt template instead of an inline string.
+        from researcher.prompts import get_plan_outline_prompt
+        prompt = get_plan_outline_prompt(
+            query=query, initial_research=initial_research, max_sections=max_sections
+        )
 
         cfg = Config()
         response = await call_model(
@@ -162,11 +147,15 @@ Respond with a JSON object:
                 log_research_progress(section, "failed", str(result))
                 logger.error("Section %r failed: %s", section, result)
                 continue
+            # OPUS FIX: collect per-section source URLs returned by the
+            # ResearchAgent sub-graph so the writer/publisher can render references.
+            section_sources = result.get("sources", []) or []
             research_data.append({
                 "section": section,
                 "draft": result.get("draft", ""),
-                "sources": [],
+                "sources": section_sources,
             })
+            all_sources.extend(section_sources)
             log_research_progress(section, "approved")
 
         print_agent_output(
