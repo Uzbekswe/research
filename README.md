@@ -25,17 +25,19 @@ Layer 6 — evals/               LLM-as-judge evaluation framework (25-question 
 researcher/
 ├── agent.py                   DeepResearcher — public entry point for Layers 1-3
 ├── config/config.py           Config dataclass (env vars + JSON override)
+├── prompts.py                 Every LLM prompt template lives here (single source of truth)
 ├── actions/
 │   ├── query_processing.py    Sub-query generation (STRATEGIC_LLM)
 │   ├── web_scraping.py        Parallel search + scrape with asyncio workers
 │   └── report_generation.py  LLM report writer and summariser
 ├── retrievers/                DuckDuckGo · Tavily · Serper
-├── scraper/                   BeautifulSoup4 HTML scraper
+├── scraper/                   BeautifulSoup4 HTML scraper (article → main → semantic div → largest div → body)
 ├── embeddings/                OpenAI · HuggingFace · Ollama embedders
 ├── vector_store/              In-memory cosine similarity store (numpy)
 ├── context/                   Sliding-window chunker + RAG context manager
 ├── memory/                    Source deduplication and cost accumulation
 └── llm_providers/             OpenAI · Anthropic · Google · Groq · Ollama · VESSL
+    └── pricing.py             Per-1M-token USD rates for cost estimation
 
 orchestrator/
 ├── state.py                   ResearchState + DraftState TypedDicts
@@ -44,10 +46,10 @@ orchestrator/
     ├── chief_editor.py        Entry point — builds and runs the graph
     ├── editor.py              Plans sections, spawns parallel sub-graphs
     ├── researcher.py          Wraps DeepResearcher for each section
-    ├── reviewer.py            Quality-gates each draft (max 3 revisions)
+    ├── reviewer.py            Quality-gates each draft (capped by Config.MAX_REVISIONS, default 2)
     ├── reviser.py             Rewrites drafts on reviewer feedback
-    ├── writer.py              Assembles intro + conclusion
-    └── publisher.py           Saves markdown (+ optional PDF / DOCX)
+    ├── writer.py              Writes intro + conclusion; fills table_of_contents and headers
+    └── publisher.py           Saves markdown (+ optional PDF / DOCX), uses writer's TOC when present
 
 backend/
 ├── main.py                    FastAPI app factory (CORS, lifespan, router mount)
@@ -106,10 +108,14 @@ RETRIEVER=duckduckgo
 EMBEDDING=huggingface:all-MiniLM-L6-v2   # free, runs locally
 # or EMBEDDING=openai:text-embedding-3-small
 
-# Set your LLM models
+# Set your LLM models (tiered: FAST = per-source summarisation,
+# SMART = final report, STRATEGIC = planning / outlines)
 FAST_LLM=openai:gpt-4o-mini
 SMART_LLM=openai:gpt-4o
 STRATEGIC_LLM=openai:gpt-4o
+
+# Optional — reviewer revision cap for the multi-agent path (default 2)
+MAX_REVISIONS=2
 ```
 
 #### Using VESSL AI (vLLM on GPU)
@@ -275,6 +281,22 @@ All LLM and embedding fields use `provider:model` format:
 
 ---
 
+## Cost tracking
+
+Every LLM provider populates `last_usage = {"prompt_tokens": int, "completion_tokens": int}` after each call. The action layer forwards this to `DeepResearcher.add_costs`, which looks up per-1M-token USD rates in [`researcher/llm_providers/pricing.py`](researcher/llm_providers/pricing.py) and accumulates the running total.
+
+```python
+from researcher import DeepResearcher
+
+r = DeepResearcher(query="What year was the Transformer introduced?")
+await r.conduct_research()
+print(f"${r.get_costs():.4f}")     # → "$0.0023"
+```
+
+The pricing table covers the current OpenAI, Anthropic, and Google model families; unknown models fall back to `0.0` rather than crashing. Update the table in `pricing.py` when new models ship.
+
+---
+
 ## Testing
 
 ```bash
@@ -304,3 +326,9 @@ web: uvicorn backend.main:app --host 0.0.0.0 --port 8000
 ```
 
 The API server is stateless except for the in-memory task store. For multi-process deployment, replace `TaskManager` in `backend/task_manager.py` with a Redis-backed store.
+
+---
+
+## Audit
+
+A senior-engineering audit report (Opus, 2026-05-28) lives at [`AUDIT_REPORT.md`](AUDIT_REPORT.md). It documents the GPT Researcher fidelity checks (3A–3I), every bug fixed, every file changed, and the recommended follow-up work.
